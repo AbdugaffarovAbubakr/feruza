@@ -42,14 +42,14 @@ bot.use(async (ctx, next) => {
 });
 
 const MAIN_MENU = Markup.keyboard([
-  ["📝 Test ishlash"],
-  ["📊 Mening urinishlarim", "ℹ️ Bot haqida"],
+  ["📝 Testlar"],
+  ["📊 Urinishlarim", "ℹ️ Bot haqida"],
 ]).resize();
 
 const ADMIN_MENU = Markup.keyboard([
-  ["📢 Xabar yuborish"],
-  ["➕ Test yaratish", "📋 Testlar ro'yxati"],
-  ["📊 Natijalar", "📡 Kanallar sozlamasi"],
+  ["📣 Xabar yuborish"],
+  ["🧩 Test yaratish", "📚 Testlar"],
+  ["📊 Natijalar", "📡 Kanallar"],
   ["👥 Foydalanuvchilar"],
   ["⬅️ Orqaga"],
 ]).resize();
@@ -172,7 +172,7 @@ function buildChannelsKeyboard(channels) {
       rows.push([Markup.button.url(channel.name, `https://t.me/${username}`)]);
     }
   }
-  rows.push([Markup.button.callback("Tekshirish", "check_channels")]);
+  rows.push([Markup.button.callback("✅ Tekshirish", "check_channels")]);
   return Markup.inlineKeyboard(rows);
 }
 
@@ -198,10 +198,13 @@ async function showJoinPrompt(ctx) {
     return showMainMenu(ctx);
   }
   const text = [
-    "Assalomu alaykum! Feya Botga xush kelibsiz.",
+    "🔔 Majburiy kanallar",
+    "",
     "Botdan foydalanish uchun quyidagi kanallarga a'zo bo'ling:",
     "",
     formatChannelsList(channels),
+    "",
+    '✅ A\'zo bo\'lgach, "✅ Tekshirish" tugmasini bosing.',
   ].join("\n");
   return ctx.reply(text, buildChannelsKeyboard(channels));
 }
@@ -211,7 +214,7 @@ async function ensureJoined(ctx) {
   if (!ok) {
     const channels = await getActiveChannels();
     await ctx.reply(
-      "Botdan foydalanish uchun barcha kanallarga ulanishingiz kerak.",
+      "⛔ Kirish cheklangan\n\nBotdan foydalanish uchun barcha kanallarga a'zo bo'lishingiz kerak.",
       buildChannelsKeyboard(channels),
     );
   }
@@ -219,11 +222,11 @@ async function ensureJoined(ctx) {
 }
 
 async function showMainMenu(ctx) {
-  return ctx.reply("Asosiy menyu:", MAIN_MENU);
+  return ctx.reply("🏠 Asosiy menyu", MAIN_MENU);
 }
 
 async function showAdminMenu(ctx) {
-  return ctx.reply("Admin panel:", ADMIN_MENU);
+  return ctx.reply("🛠️ Admin panel", ADMIN_MENU);
 }
 
 function chunkButtons(buttons, size) {
@@ -241,11 +244,18 @@ function optionLabel(index) {
   return String(index + 1);
 }
 
+function formatTestStatus(status) {
+  return status === "open" ? "✅ Ochiq" : "❌ Yopiq";
+}
+
 async function sendTestChoices(ctx, tests) {
   const rows = tests.map((t) => [
     Markup.button.callback(`${t.title}`, `start_test:${t.id}`),
   ]);
-  return ctx.reply("Testni tanlang:", Markup.inlineKeyboard(rows));
+  return ctx.reply(
+    `🧩 Testni tanlang\n\nMavjud testlar: ${tests.length}`,
+    Markup.inlineKeyboard(rows),
+  );
 }
 
 async function sendQuestion(ctx, test, index) {
@@ -256,13 +266,21 @@ async function sendQuestion(ctx, test, index) {
   const optionsText = q.options
     .map((opt, i) => `${optionLabel(i)}. ${opt}`)
     .join("\n");
-  const text = `Savol ${index + 1}/${test.questions.length}\n${q.question}\n\nVariantlar:\n${optionsText}`;
+  const text = [
+    `🧩 Test: ${test.title}`,
+    `❓ Savol ${index + 1}/${test.questions.length}`,
+    "",
+    `${q.question}`,
+    "",
+    "Variantlar:",
+    optionsText,
+  ].join("\n");
   return ctx.reply(text, Markup.inlineKeyboard(chunkButtons(buttons, 3)));
 }
 
 async function startTest(ctx, test) {
   if (ctx.session.test) {
-    return ctx.reply("Test davom etmoqda.");
+    return ctx.reply("⚠️ Sizda faol test bor. Avval uni yakunlang.");
   }
   ctx.session.test = { testId: test.id, index: 0, correct: 0 };
   await sendQuestion(ctx, test, 0);
@@ -304,7 +322,7 @@ async function finishTest(ctx, test, correct) {
 async function sendResultsSummary(ctx) {
   const resultsData = await getResultsData();
   if (!resultsData.results.length) {
-    return ctx.reply("Natijalar yo'q.");
+    return ctx.reply("ℹ️ Natijalar hali yo'q.");
   }
 
   const usersData = await getUsersData();
@@ -330,7 +348,7 @@ async function sendResultsSummary(ctx) {
     })
     .sort((a, b) => String(b.lastDate).localeCompare(String(a.lastDate)));
 
-  await ctx.reply(`Testlar bo'yicha natijalar: ${groups.length}`);
+  await ctx.reply(`📊 Natijalar (testlar bo'yicha)\n\nJami testlar: ${groups.length}`);
 
   for (const group of groups) {
     const results = [...group.list].sort((a, b) => {
@@ -385,7 +403,7 @@ async function sendLongText(ctx, text) {
 async function sendUsersList(ctx) {
   const usersData = await getUsersData();
   if (!usersData.users.length) {
-    return ctx.reply("Hali foydalanuvchilar yo'q.");
+    return ctx.reply("ℹ️ Hali foydalanuvchilar yo'q.");
   }
 
   const users = [...usersData.users].sort((a, b) =>
@@ -406,7 +424,7 @@ async function sendUsersList(ctx) {
   });
 
   const chunkSize = 15;
-  await ctx.reply(`Foydalanuvchilar soni: ${users.length}`);
+  await ctx.reply(`👥 Foydalanuvchilar\n\nJami: ${users.length}`);
   for (let i = 0; i < lines.length; i += chunkSize) {
     const chunk = lines.slice(i, i + chunkSize).join("\n\n");
     await ctx.reply(chunk);
@@ -416,26 +434,28 @@ async function sendUsersList(ctx) {
 async function sendTestList(ctx) {
   const testsData = await getTestsData();
   if (!testsData.tests.length) {
-    return ctx.reply("Testlar yo'q.");
+    return ctx.reply("ℹ️ Hali testlar yo'q.");
   }
+
+  await ctx.reply(`📚 Testlar ro'yxati\n\nJami: ${testsData.tests.length}`);
 
   for (const test of testsData.tests) {
     const text = [
       `#${test.id} ${test.title}`,
-      `Holat: ${test.status}`,
+      `Holat: ${formatTestStatus(test.status)}`,
       `Savollar: ${test.questions.length}`,
     ].join("\n");
 
     const keyboard = Markup.inlineKeyboard([
       [
         Markup.button.callback(
-          test.status === "open" ? "Yopish" : "Ochish",
+          test.status === "open" ? "🔒 Yopish" : "🔓 Ochish",
           `test_toggle:${test.id}`,
         ),
       ],
       [
-        Markup.button.callback("Tahrirlash", `test_edit:${test.id}`),
-        Markup.button.callback("O'chirish", `test_delete:${test.id}`),
+        Markup.button.callback("✏️ Tahrirlash", `test_edit:${test.id}`),
+        Markup.button.callback("🗑️ O'chirish", `test_delete:${test.id}`),
       ],
     ]);
 
@@ -475,13 +495,15 @@ async function handleAdminMessage(ctx) {
     }
 
     ctx.session.admin = null;
-    await ctx.reply(`Xabar yuborildi. Yetkazildi: ${ok}, Xatolar: ${fail}`);
+    await ctx.reply(
+      `✅ Xabar yuborildi.\nYetkazildi: ${ok}\nXatolar: ${fail}`,
+    );
     await showAdminMenu(ctx);
     return true;
   }
 
   if (!ctx.message || !ctx.message.text) {
-    await ctx.reply("Iltimos, matn yuboring.");
+    await ctx.reply("⚠️ Iltimos, matn yuboring.");
     return true;
   }
 
@@ -489,31 +511,37 @@ async function handleAdminMessage(ctx) {
 
   if (admin.mode === "create_test_title") {
     if (!text) {
-      await ctx.reply("Test nomini kiriting.");
+      await ctx.reply("🧩 Test yaratish (1/5)\n\nTest nomini kiriting.");
       return true;
     }
     admin.newTest.title = text;
     admin.mode = "create_test_count";
-    await ctx.reply("Savollar sonini kiriting (masalan: 10).");
+    await ctx.reply(
+      "🧩 Test yaratish (2/5)\n\nSavollar sonini kiriting (1-100).",
+    );
     return true;
   }
 
   if (admin.mode === "create_test_count") {
     const count = Number(text);
     if (!Number.isInteger(count) || count <= 0 || count > 100) {
-      await ctx.reply("Iltimos, 1 dan 100 gacha bo'lgan son kiriting.");
+      await ctx.reply("⚠️ Iltimos, 1 dan 100 gacha bo'lgan son kiriting.");
       return true;
     }
     admin.newTest.totalQuestions = count;
     admin.mode = "create_test_question";
-    await ctx.reply("1-savol matnini kiriting.");
+    await ctx.reply(
+      `🧩 Test yaratish (3/5)\n\nSavol 1/${count} matnini kiriting.`,
+    );
     return true;
   }
 
   if (admin.mode === "create_test_question") {
     admin.currentQuestion = { question: text };
     admin.mode = "create_test_options";
-    await ctx.reply("Variantlarni '|' bilan ajrating (masalan: A|B|C|D).");
+    await ctx.reply(
+      `🧩 Test yaratish (4/5)\n\nSavol ${admin.newTest.questions.length + 1}/${admin.newTest.totalQuestions} uchun variantlarni '|' bilan ajrating (masalan: A|B|C|D).`,
+    );
     return true;
   }
 
@@ -523,12 +551,14 @@ async function handleAdminMessage(ctx) {
       .map((s) => s.trim())
       .filter(Boolean);
     if (options.length < 2) {
-      await ctx.reply("Kamida 2 ta variant kiriting.");
+      await ctx.reply("⚠️ Kamida 2 ta variant kiriting.");
       return true;
     }
     admin.currentQuestion.options = options;
     admin.mode = "create_test_correct";
-    await ctx.reply(`To'g'ri javob raqamini kiriting (1-${options.length}).`);
+    await ctx.reply(
+      `🧩 Test yaratish (5/5)\n\nSavol ${admin.newTest.questions.length + 1}/${admin.newTest.totalQuestions} uchun to'g'ri javob raqamini kiriting (1-${options.length}).`,
+    );
     return true;
   }
 
@@ -536,7 +566,7 @@ async function handleAdminMessage(ctx) {
     const index = Number(text);
     const total = admin.currentQuestion.options.length;
     if (!Number.isInteger(index) || index < 1 || index > total) {
-      await ctx.reply(`Iltimos, 1 dan ${total} gacha son kiriting.`);
+      await ctx.reply(`⚠️ Iltimos, 1 dan ${total} gacha son kiriting.`);
       return true;
     }
 
@@ -547,7 +577,7 @@ async function handleAdminMessage(ctx) {
     if (admin.newTest.questions.length >= admin.newTest.totalQuestions) {
       admin.mode = "create_test_status";
       await ctx.reply(
-        "Test holatini tanlang:",
+        "🧩 Test holati\n\nTestni ochiq yoki yopiq qiling:",
         Markup.inlineKeyboard([
           [Markup.button.callback("Ochiq ✅", "test_status:open")],
           [Markup.button.callback("Yopiq ❌", "test_status:closed")],
@@ -558,7 +588,9 @@ async function handleAdminMessage(ctx) {
 
     admin.mode = "create_test_question";
     const nextNum = admin.newTest.questions.length + 1;
-    await ctx.reply(`${nextNum}-savol matnini kiriting.`);
+    await ctx.reply(
+      `🧩 Test yaratish (3/5)\n\nSavol ${nextNum}/${admin.newTest.totalQuestions} matnini kiriting.`,
+    );
     return true;
   }
 
@@ -567,13 +599,13 @@ async function handleAdminMessage(ctx) {
     const test = testsData.tests.find((t) => t.id === admin.testId);
     if (!test) {
       ctx.session.admin = null;
-      await ctx.reply("Test topilmadi.");
+      await ctx.reply("⚠️ Test topilmadi.");
       return true;
     }
     test.title = text;
     await saveTestsData(testsData);
     ctx.session.admin = null;
-    await ctx.reply("Test nomi yangilandi.");
+    await ctx.reply("✅ Test nomi yangilandi.");
     await showAdminMenu(ctx);
     return true;
   }
@@ -582,7 +614,7 @@ async function handleAdminMessage(ctx) {
     const input = text;
     if (!input.startsWith("@") && !/^-?\d+$/.test(input)) {
       await ctx.reply(
-        "Kanal username yoki ID kiriting (masalan: @kanal yoki -100123...).",
+        "⚠️ Kanal username yoki ID kiriting (masalan: @kanal yoki -100123...).",
       );
       return true;
     }
@@ -590,7 +622,7 @@ async function handleAdminMessage(ctx) {
     try {
       const chat = await ctx.telegram.getChat(input);
       if (chat.type !== "channel") {
-        await ctx.reply("Bu kanal emas. Iltimos, kanal kiriting.");
+        await ctx.reply("⚠️ Bu kanal emas. Iltimos, kanal kiriting.");
         return true;
       }
 
@@ -618,11 +650,11 @@ async function handleAdminMessage(ctx) {
 
       await saveChannelsData(channelsData);
       ctx.session.admin = null;
-      await ctx.reply(`Kanal qo'shildi: ${chat.title || chat.id}`);
+      await ctx.reply(`✅ Kanal qo'shildi: ${chat.title || chat.id}`);
       await showAdminMenu(ctx);
       return true;
     } catch (err) {
-      await ctx.reply("Kanal topilmadi yoki botda ruxsat yo'q.");
+      await ctx.reply("⚠️ Kanal topilmadi yoki botda ruxsat yo'q.");
       return true;
     }
   }
@@ -647,7 +679,7 @@ bot.start(async (ctx) => {
 
 bot.command("admin", async (ctx) => {
   if (!isAdmin(ctx.from.id)) {
-    return ctx.reply("Ruxsat yo'q.");
+    return ctx.reply("⛔ Ruxsat yo'q.");
   }
   await showAdminMenu(ctx);
 });
@@ -657,7 +689,7 @@ bot.command("cancel", async (ctx) => {
     ctx.session.admin = null;
     ctx.session.test = null;
   }
-  return ctx.reply("Bekor qilindi.");
+  return ctx.reply("✅ Bekor qilindi.");
 });
 
 bot.action("check_channels", async (ctx) => {
@@ -668,24 +700,24 @@ bot.action("check_channels", async (ctx) => {
   }
   const channels = await getActiveChannels();
   return ctx.reply(
-    "Botdan foydalanish uchun barcha kanallarga ulanishingiz kerak.",
+    "⛔ Kirish cheklangan\n\nBotdan foydalanish uchun barcha kanallarga a'zo bo'lishingiz kerak.",
     buildChannelsKeyboard(channels),
   );
 });
 
 bot.hears("⬅️ Orqaga", async (ctx) => showMainMenu(ctx));
 
-bot.hears("📝 Test ishlash", async (ctx) => {
+bot.hears("📝 Testlar", async (ctx) => {
   if (!(await ensureJoined(ctx))) return;
   const testsData = await getTestsData();
   const openTests = testsData.tests.filter((t) => t.status === "open");
   if (!openTests.length) {
-    return ctx.reply("Hozir test ishlash vaqti emas.");
+    return ctx.reply("⏳ Hozir testlar yopiq.");
   }
   const attempted = await getAttemptedTestIds(ctx.from.id);
   const availableTests = openTests.filter((t) => !attempted.has(t.id));
   if (!availableTests.length) {
-    return ctx.reply("Siz barcha ochiq testlarni ishlab bo'lgansiz.");
+    return ctx.reply("✅ Siz barcha ochiq testlarni ishlab bo'lgansiz.");
   }
   if (availableTests.length === 1) {
     return startTest(ctx, availableTests[0]);
@@ -699,14 +731,14 @@ bot.action(/^start_test:(\d+)$/, async (ctx) => {
   const testId = Number(ctx.match[1]);
   const attempted = await getAttemptedTestIds(ctx.from.id);
   if (attempted.has(testId)) {
-    return ctx.reply("Bu testni ishlagansiz.");
+    return ctx.reply("⚠️ Bu testni allaqachon ishlagansiz.");
   }
   const testsData = await getTestsData();
   const test = testsData.tests.find(
     (t) => t.id === testId && t.status === "open",
   );
   if (!test || test.status !== "open") {
-    return ctx.reply("Hozir test ishlash vaqti emas.");
+    return ctx.reply("⏳ Hozir testlar yopiq.");
   }
   return startTest(ctx, test);
 });
@@ -742,20 +774,20 @@ bot.action(/^ans:(\d+):(\d+):(\d+)$/, async (ctx) => {
     const correct = sessionTest.correct;
     ctx.session.test = null;
     await finishTest(ctx, test, correct);
-    return ctx.reply("Test tugadi. Rahmat!");
+    return ctx.reply("✅ Test yakunlandi. Rahmat!");
   }
 
   return sendQuestion(ctx, test, sessionTest.index);
 });
 
-bot.hears("📊 Mening urinishlarim", async (ctx) => {
+bot.hears("📊 Urinishlarim", async (ctx) => {
   if (!(await ensureJoined(ctx))) return;
   const resultsData = await getResultsData();
   const userResults = resultsData.results.filter(
     (r) => r.user_id === ctx.from.id,
   );
   if (!userResults.length) {
-    return ctx.reply("Hali urinishlar yo'q.");
+    return ctx.reply("ℹ️ Hali urinishlar yo'q.");
   }
   const testsData = await getTestsData();
   const testMap = new Map(testsData.tests.map((t) => [t.id, t.title]));
@@ -764,36 +796,36 @@ bot.hears("📊 Mening urinishlarim", async (ctx) => {
     const title = testMap.get(r.test_id) || `Test #${r.test_id}`;
     return `${i + 1}. ${title} - ${r.percentage}% (${r.date})`;
   });
-  return ctx.reply(`Urinishlar: ${userResults.length}\n${lines.join("\n")}`);
-});
-
-bot.hears("ℹ️ Bot haqida", async (ctx) => {
-  return ctx.reply(`💡 Ushbu bot STEAM yo‘nalishlari bo‘yicha bilimlarni mustahkamlash, intellektual raqobatni rivojlantirish va ishtirokchilarni doimiy o‘rganishga rag‘batlantirish uchun xizmat qiladi.
-
-🚀 Bilimingizni sinab ko‘ring, reytingda yuqoriga ko‘tariling va sovrinli g‘oliblardan biriga aylaning!
-
-👨‍💻 Bot yaratuvchisi: @AbdugaffarovAbubakr`);
-});
-
-bot.hears("📢 Xabar yuborish", async (ctx) => {
-  if (!isAdmin(ctx.from.id)) return;
-  ctx.session.admin = { mode: "broadcast" };
-  await ctx.reply(
-    "Yuboriladigan xabarni jo'nating. Bekor qilish uchun /cancel.",
+  return ctx.reply(
+    `📊 Urinishlarim\n\nJami: ${userResults.length}\n${lines.join("\n")}`,
   );
 });
 
-bot.hears("➕ Test yaratish", async (ctx) => {
+bot.hears("ℹ️ Bot haqida", async (ctx) => {
+  return ctx.reply(
+    "ℹ️ Bot haqida\n\nFeya Bot foydalanuvchilar uchun test yechish botidir. Maqsad — bilimlarni mustahkamlash va intellektual raqobatni rivojlantirish.\n\n👨‍💻 Muallif: @AbdugaffarovAbubakr",
+  );
+});
+
+bot.hears("📣 Xabar yuborish", async (ctx) => {
+  if (!isAdmin(ctx.from.id)) return;
+  ctx.session.admin = { mode: "broadcast" };
+  await ctx.reply(
+    "📣 Xabar yuborish\n\nYuboriladigan xabarni jo'nating.\nBekor qilish: /cancel",
+  );
+});
+
+bot.hears("🧩 Test yaratish", async (ctx) => {
   if (!isAdmin(ctx.from.id)) return;
   ctx.session.admin = {
     mode: "create_test_title",
     newTest: { title: "", totalQuestions: 0, questions: [] },
     currentQuestion: null,
   };
-  await ctx.reply("Test nomini kiriting.");
+  await ctx.reply("🧩 Test yaratish (1/5)\n\nTest nomini kiriting.");
 });
 
-bot.hears("📋 Testlar ro'yxati", async (ctx) => {
+bot.hears("📚 Testlar", async (ctx) => {
   if (!isAdmin(ctx.from.id)) return;
   await sendTestList(ctx);
 });
@@ -808,10 +840,10 @@ bot.hears("👥 Foydalanuvchilar", async (ctx) => {
   await sendUsersList(ctx);
 });
 
-bot.hears("📡 Kanallar sozlamasi", async (ctx) => {
+bot.hears("📡 Kanallar", async (ctx) => {
   if (!isAdmin(ctx.from.id)) return;
   await ctx.reply(
-    "Kanallar sozlamasi:",
+    "📡 Kanallar\n\nKerakli amalni tanlang:",
     Markup.inlineKeyboard([
       [Markup.button.callback("➕ Kanal qo'shish", "channels_add")],
       [Markup.button.callback("➖ Kanal o'chirish", "channels_remove")],
@@ -824,7 +856,7 @@ bot.action("channels_add", async (ctx) => {
   if (!isAdmin(ctx.from.id)) return;
   ctx.session.admin = { mode: "add_channel" };
   await ctx.reply(
-    "Kanal username yoki ID kiriting (masalan: @kanal yoki -100123...).",
+    "📡 Kanal qo'shish\n\nKanal username yoki ID kiriting (masalan: @kanal yoki -100123...).",
   );
 });
 
@@ -833,13 +865,13 @@ bot.action("channels_remove", async (ctx) => {
   if (!isAdmin(ctx.from.id)) return;
   const channels = await getActiveChannels();
   if (!channels.length) {
-    return ctx.reply("Faol kanallar yo'q.");
+    return ctx.reply("ℹ️ Faol kanallar yo'q.");
   }
   const rows = channels.map((c) => [
     Markup.button.callback(`${c.name}`, `remove_channel:${c.id}`),
   ]);
   await ctx.reply(
-    "O'chiriladigan kanalni tanlang:",
+    "📡 Kanal o'chirish\n\nO'chiriladigan kanalni tanlang:",
     Markup.inlineKeyboard(rows),
   );
 });
@@ -851,11 +883,11 @@ bot.action(/^remove_channel:(-?\d+)$/, async (ctx) => {
   const data = await getChannelsData();
   const channel = data.channels.find((c) => c.id === channelId);
   if (!channel) {
-    return ctx.reply("Kanal topilmadi.");
+    return ctx.reply("⚠️ Kanal topilmadi.");
   }
   channel.status = "inactive";
   await saveChannelsData(data);
-  await ctx.reply(`Kanal o'chirildi: ${channel.name}`);
+  await ctx.reply(`✅ Kanal o'chirildi: ${channel.name}`);
 });
 
 bot.action(/^test_toggle:(\d+)$/, async (ctx) => {
@@ -865,11 +897,11 @@ bot.action(/^test_toggle:(\d+)$/, async (ctx) => {
   const testsData = await getTestsData();
   const test = testsData.tests.find((t) => t.id === testId);
   if (!test) {
-    return ctx.reply("Test topilmadi.");
+    return ctx.reply("⚠️ Test topilmadi.");
   }
   test.status = test.status === "open" ? "closed" : "open";
   await saveTestsData(testsData);
-  await ctx.reply(`Test holati yangilandi: ${test.status}`);
+  await ctx.reply(`✅ Test holati yangilandi: ${formatTestStatus(test.status)}`);
 });
 
 bot.action(/^test_edit:(\d+)$/, async (ctx) => {
@@ -877,7 +909,7 @@ bot.action(/^test_edit:(\d+)$/, async (ctx) => {
   if (!isAdmin(ctx.from.id)) return;
   const testId = Number(ctx.match[1]);
   ctx.session.admin = { mode: "edit_test_title", testId };
-  await ctx.reply("Yangi test nomini kiriting.");
+  await ctx.reply("✏️ Test tahriri\n\nYangi test nomini kiriting.");
 });
 
 bot.action(/^test_delete:(\d+)$/, async (ctx) => {
@@ -885,15 +917,15 @@ bot.action(/^test_delete:(\d+)$/, async (ctx) => {
   if (!isAdmin(ctx.from.id)) return;
   const testId = Number(ctx.match[1]);
   await ctx.reply(
-    `Test #${testId} o'chirilsinmi?`,
+    `⚠️ Test #${testId} o'chirilsinmi?`,
     Markup.inlineKeyboard([
       [
         Markup.button.callback(
-          "Ha, o'chirish",
+          "✅ Ha, o'chirish",
           `test_delete_confirm:${testId}`,
         ),
       ],
-      [Markup.button.callback("Bekor", "test_delete_cancel")],
+      [Markup.button.callback("❌ Bekor", "test_delete_cancel")],
     ]),
   );
 });
@@ -906,16 +938,16 @@ bot.action(/^test_delete_confirm:(\d+)$/, async (ctx) => {
   const before = testsData.tests.length;
   testsData.tests = testsData.tests.filter((t) => t.id !== testId);
   if (testsData.tests.length === before) {
-    return ctx.reply("Test topilmadi.");
+    return ctx.reply("⚠️ Test topilmadi.");
   }
   await saveTestsData(testsData);
-  await ctx.reply("Test o'chirildi.");
+  await ctx.reply("✅ Test o'chirildi.");
 });
 
 bot.action("test_delete_cancel", async (ctx) => {
   await ctx.answerCbQuery();
   if (!isAdmin(ctx.from.id)) return;
-  await ctx.reply("Bekor qilindi.");
+  await ctx.reply("✅ Bekor qilindi.");
 });
 
 bot.action(/^test_status:(open|closed)$/, async (ctx) => {
@@ -939,7 +971,7 @@ bot.action(/^test_status:(open|closed)$/, async (ctx) => {
   await saveTestsData(testsData);
 
   ctx.session.admin = null;
-  await ctx.reply(`Test yaratildi: #${record.id} ${record.title}`);
+  await ctx.reply(`✅ Test yaratildi: #${record.id} ${record.title}`);
   await showAdminMenu(ctx);
 });
 
