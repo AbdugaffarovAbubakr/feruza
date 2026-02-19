@@ -1,0 +1,44 @@
+{
+  "results": [
+    {
+      "user_id": 7476378207,
+      "username": "ErkinovaG_08",
+      "full_name": "Erkinova @cs_shot_bot",
+      "test_id": 1,
+      "correct": 2,
+      "wrong": 0,
+      "percentage": 100,
+      "date": "2026-02-18"
+    },
+    {
+      "user_id": 7476378207,
+      "username": "ErkinovaG_08",
+      "full_name": "Erkinova @cs_shot_bot",
+      "test_id": 1,
+      "correct": 0,
+      "wrong": 2,
+      "percentage": 0,
+      "date": "2026-02-18"
+    },
+    {
+      "user_id": 7329574139,
+      "username": "Ryosholimlar_uz",
+      "full_name": "UZB",
+      "test_id": 1,
+      "correct": 1,
+      "wrong": 1,
+      "percentage": 50,
+      "date": "2026-02-18"
+    },
+    {
+      "user_id": 7329574139,
+      "username": "Ryosholimlar_uz",
+      "full_name": "UZB",
+      "test_id": 2,
+      "correct": 2,
+      "wrong": 0,
+      "percentage": 100,
+      "date": "2026-02-18"
+    }
+  ]
+}

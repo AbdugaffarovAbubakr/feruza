@@ -1,0 +1,32 @@
+{
+  "users": [
+    {
+      "id": 5052267021,
+      "username": "AbdugaffarovAbubakr",
+      "full_name": "Абубакр Абдугаффаров",
+      "joined_date": "2026-02-18",
+      "tests_worked": 0
+    },
+    {
+      "id": 7476378207,
+      "username": "ErkinovaG_08",
+      "full_name": "Erkinova @cs_shot_bot",
+      "joined_date": "2026-02-18",
+      "tests_worked": 2
+    },
+    {
+      "id": 579895271,
+      "username": "Feruza_Norkulova",
+      "full_name": "Feruza Norkulova",
+      "joined_date": "2026-02-18",
+      "tests_worked": 0
+    },
+    {
+      "id": 7329574139,
+      "username": "Ryosholimlar_uz",
+      "full_name": "UZB",
+      "joined_date": "2026-02-18",
+      "tests_worked": 2
+    }
+  ]
+}
