@@ -499,8 +499,25 @@ async function sendUsersList(ctx) {
 }
 
 async function sendAdminList(ctx) {
+  const usersData = await getUsersData();
+  const userMap = new Map(usersData.users.map((u) => [u.id, u]));
   const { superIds, staticIds, dynamicIds } = buildAdminLists();
   const totalAdmins = superIds.length + staticIds.length + dynamicIds.length;
+
+  const formatAdminLine = (id, index) => {
+    const user = userMap.get(id);
+    const username = user?.username ? `@${user.username}` : "—";
+    const fullName = user?.full_name || "—";
+    const joined = user?.joined_date || "—";
+    const worked = Number(user?.tests_worked || 0);
+    return [
+      `${index}. 🆔 ${id}`,
+      `   👤 Username: ${username}`,
+      `   📛 F.I.O: ${fullName}`,
+      `   📅 Qo'shilgan: ${joined}`,
+      `   📝 Urinishlar: ${worked}`,
+    ].join("\n");
+  };
 
   const lines = [];
   lines.push("👑 Adminlar");
@@ -514,7 +531,7 @@ async function sendAdminList(ctx) {
   if (superIds.length) {
     lines.push("👑 Super adminlar:");
     superIds.forEach((id, i) => {
-      lines.push(`${i + 1}. ${id}`);
+      lines.push(formatAdminLine(id, i + 1));
     });
     lines.push("");
   }
@@ -522,7 +539,7 @@ async function sendAdminList(ctx) {
   if (staticIds.length) {
     lines.push("🔒 Oddiy adminlar (.env):");
     staticIds.forEach((id, i) => {
-      lines.push(`${i + 1}. ${id}`);
+      lines.push(formatAdminLine(id, i + 1));
     });
     lines.push("");
   }
@@ -530,7 +547,7 @@ async function sendAdminList(ctx) {
   if (dynamicIds.length) {
     lines.push("🛡️ Oddiy adminlar (bot orqali):");
     dynamicIds.forEach((id, i) => {
-      lines.push(`${i + 1}. ${id}`);
+      lines.push(formatAdminLine(id, i + 1));
     });
     lines.push("");
   }
