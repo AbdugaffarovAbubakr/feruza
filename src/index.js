@@ -4,6 +4,17 @@ require("dotenv").config();
 const { Telegraf, Markup, session } = require("telegraf");
 const { ensureDataFiles, readJson, writeJson } = require("./storage");
 
+const http = require('http');
+
+const PORT = process.env.PORT || 9001;
+
+http.createServer((req, res) => {
+  res.writeHead(200, { 'Content-Type': 'text/plain' });
+  res.end('Bot is running');
+}).listen(PORT, () => {
+  console.log(`HTTP server running on port ${PORT}`);
+});
+
 const BOT_TOKEN = process.env.BOT_TOKEN;
 const SUPER_ADMIN_IDS = (process.env.SUPER_ADMIN_IDS || "")
   .split(",")
