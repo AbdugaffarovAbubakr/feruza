@@ -5,12 +5,23 @@ const { Telegraf, Markup, session } = require("telegraf");
 const { ensureDataFiles, readJson, writeJson } = require("./storage");
 
 const BOT_TOKEN = process.env.BOT_TOKEN;
+const SUPER_ADMIN_IDS = (process.env.SUPER_ADMIN_IDS || "")
+  .split(",")
+  .map((id) => id.trim())
+  .filter(Boolean)
+  .map((id) => Number(id))
+  .filter((id) => Number.isFinite(id));
+
 const ADMIN_IDS = (process.env.ADMIN_IDS || "")
   .split(",")
   .map((id) => id.trim())
   .filter(Boolean)
   .map((id) => Number(id))
   .filter((id) => Number.isFinite(id));
+
+const EFFECTIVE_SUPER_ADMIN_IDS = SUPER_ADMIN_IDS.length
+  ? SUPER_ADMIN_IDS
+  : ADMIN_IDS;
 
 if (!BOT_TOKEN) {
   console.error("BOT_TOKEN is missing. Set it in .env");
@@ -54,8 +65,21 @@ const ADMIN_MENU = Markup.keyboard([
   ["⬅️ Orqaga"],
 ]).resize();
 
+const SUPER_ADMIN_MENU = Markup.keyboard([
+  ["📣 Xabar yuborish"],
+  ["🧩 Test yaratish", "📚 Testlar"],
+  ["📊 Natijalar", "📡 Kanallar"],
+  ["👥 Foydalanuvchilar"],
+  ["👑 Adminlar"],
+  ["⬅️ Orqaga"],
+]).resize();
+
+function isSuperAdmin(id) {
+  return EFFECTIVE_SUPER_ADMIN_IDS.includes(id);
+}
+
 function isAdmin(id) {
-  return ADMIN_IDS.includes(id);
+  return isSuperAdmin(id) || ADMIN_IDS.includes(id) || dynamicAdmins.has(id);
 }
 
 function formatDate(date = new Date()) {
@@ -99,6 +123,28 @@ async function getResultsData() {
 
 async function saveResultsData(data) {
   return writeJson("results", data);
+}
+
+async function getAdminsData() {
+  return readJson("admins");
+}
+
+async function saveAdminsData(data) {
+  return writeJson("admins", data);
+}
+
+let dynamicAdmins = new Set();
+
+async function loadDynamicAdmins() {
+  const data = await getAdminsData();
+  const list = Array.isArray(data.admins) ? data.admins : [];
+  dynamicAdmins = new Set(
+    list.map((id) => Number(id)).filter((id) => Number.isFinite(id)),
+  );
+}
+
+async function saveDynamicAdmins() {
+  return saveAdminsData({ admins: [...dynamicAdmins] });
 }
 
 async function getAttemptedTestIds(userId) {
@@ -226,7 +272,8 @@ async function showMainMenu(ctx) {
 }
 
 async function showAdminMenu(ctx) {
-  return ctx.reply("🛠️ Admin panel", ADMIN_MENU);
+  const menu = isSuperAdmin(ctx.from.id) ? SUPER_ADMIN_MENU : ADMIN_MENU;
+  return ctx.reply("🛠️ Admin panel", menu);
 }
 
 function chunkButtons(buttons, size) {
@@ -246,6 +293,26 @@ function optionLabel(index) {
 
 function formatTestStatus(status) {
   return status === "open" ? "✅ Ochiq" : "❌ Yopiq";
+}
+
+function parseAdminId(text) {
+  const id = Number(String(text).trim());
+  if (!Number.isFinite(id) || id <= 0) return null;
+  return id;
+}
+
+function buildAdminLists() {
+  const superSet = new Set(EFFECTIVE_SUPER_ADMIN_IDS);
+  const staticSet = new Set(ADMIN_IDS);
+  const superIds = [...superSet].sort((a, b) => a - b);
+  const staticIds = [...staticSet]
+    .filter((id) => !superSet.has(id))
+    .sort((a, b) => a - b);
+  const dynamicIds = [...dynamicAdmins]
+    .filter((id) => !superSet.has(id) && !staticSet.has(id))
+    .sort((a, b) => a - b);
+
+  return { superIds, staticIds, dynamicIds };
 }
 
 async function sendTestChoices(ctx, tests) {
@@ -431,6 +498,50 @@ async function sendUsersList(ctx) {
   }
 }
 
+async function sendAdminList(ctx) {
+  const { superIds, staticIds, dynamicIds } = buildAdminLists();
+  const totalAdmins = superIds.length + staticIds.length + dynamicIds.length;
+
+  const lines = [];
+  lines.push("👑 Adminlar");
+  lines.push(`Jami: ${totalAdmins}`);
+  lines.push(`Super adminlar: ${superIds.length}`);
+  lines.push(
+    `Oddiy adminlar: ${staticIds.length + dynamicIds.length}`,
+  );
+  lines.push("");
+
+  if (superIds.length) {
+    lines.push("👑 Super adminlar:");
+    superIds.forEach((id, i) => {
+      lines.push(`${i + 1}. ${id}`);
+    });
+    lines.push("");
+  }
+
+  if (staticIds.length) {
+    lines.push("🔒 Oddiy adminlar (.env):");
+    staticIds.forEach((id, i) => {
+      lines.push(`${i + 1}. ${id}`);
+    });
+    lines.push("");
+  }
+
+  if (dynamicIds.length) {
+    lines.push("🛡️ Oddiy adminlar (bot orqali):");
+    dynamicIds.forEach((id, i) => {
+      lines.push(`${i + 1}. ${id}`);
+    });
+    lines.push("");
+  }
+
+  if (!staticIds.length && !dynamicIds.length) {
+    lines.push("Oddiy adminlar yo'q.");
+  }
+
+  await sendLongText(ctx, lines.join("\n"));
+}
+
 async function sendTestList(ctx) {
   const testsData = await getTestsData();
   if (!testsData.tests.length) {
@@ -606,6 +717,64 @@ async function handleAdminMessage(ctx) {
     await saveTestsData(testsData);
     ctx.session.admin = null;
     await ctx.reply("✅ Test nomi yangilandi.");
+    await showAdminMenu(ctx);
+    return true;
+  }
+
+  if (admin.mode === "add_admin") {
+    if (!isSuperAdmin(ctx.from.id)) {
+      ctx.session.admin = null;
+      await ctx.reply("⛔ Ruxsat yo'q.");
+      return true;
+    }
+    const id = parseAdminId(text);
+    if (!id) {
+      await ctx.reply("⚠️ Admin ID raqamini kiriting (faqat raqam).");
+      return true;
+    }
+    if (isSuperAdmin(id)) {
+      await ctx.reply("ℹ️ Bu foydalanuvchi super admin.");
+      return true;
+    }
+    if (isAdmin(id)) {
+      await ctx.reply("ℹ️ Bu foydalanuvchi allaqachon admin.");
+      return true;
+    }
+    dynamicAdmins.add(id);
+    await saveDynamicAdmins();
+    ctx.session.admin = null;
+    await ctx.reply(`✅ Admin qo'shildi: ${id}`);
+    await showAdminMenu(ctx);
+    return true;
+  }
+
+  if (admin.mode === "remove_admin") {
+    if (!isSuperAdmin(ctx.from.id)) {
+      ctx.session.admin = null;
+      await ctx.reply("⛔ Ruxsat yo'q.");
+      return true;
+    }
+    const id = parseAdminId(text);
+    if (!id) {
+      await ctx.reply("⚠️ Admin ID raqamini kiriting (faqat raqam).");
+      return true;
+    }
+    if (isSuperAdmin(id)) {
+      await ctx.reply("⚠️ Super adminni olib tashlab bo'lmaydi.");
+      return true;
+    }
+    if (ADMIN_IDS.includes(id)) {
+      await ctx.reply("⚠️ Bu admin .env orqali belgilangan, olib tashlab bo'lmaydi.");
+      return true;
+    }
+    if (!dynamicAdmins.has(id)) {
+      await ctx.reply("ℹ️ Bu foydalanuvchi admin emas.");
+      return true;
+    }
+    dynamicAdmins.delete(id);
+    await saveDynamicAdmins();
+    ctx.session.admin = null;
+    await ctx.reply(`✅ Admin olib tashlandi: ${id}`);
     await showAdminMenu(ctx);
     return true;
   }
@@ -840,6 +1009,18 @@ bot.hears("👥 Foydalanuvchilar", async (ctx) => {
   await sendUsersList(ctx);
 });
 
+bot.hears("👑 Adminlar", async (ctx) => {
+  if (!isSuperAdmin(ctx.from.id)) return;
+  await ctx.reply(
+    "👑 Adminlar\n\nKerakli amalni tanlang:",
+    Markup.inlineKeyboard([
+      [Markup.button.callback("➕ Admin qo'shish", "admins_add")],
+      [Markup.button.callback("➖ Admin o'chirish", "admins_remove")],
+      [Markup.button.callback("📋 Adminlar ro'yxati", "admins_list")],
+    ]),
+  );
+});
+
 bot.hears("📡 Kanallar", async (ctx) => {
   if (!isAdmin(ctx.from.id)) return;
   await ctx.reply(
@@ -849,6 +1030,26 @@ bot.hears("📡 Kanallar", async (ctx) => {
       [Markup.button.callback("➖ Kanal o'chirish", "channels_remove")],
     ]),
   );
+});
+
+bot.action("admins_add", async (ctx) => {
+  await ctx.answerCbQuery();
+  if (!isSuperAdmin(ctx.from.id)) return;
+  ctx.session.admin = { mode: "add_admin" };
+  await ctx.reply("👑 Admin qo'shish\n\nAdmin ID raqamini kiriting.");
+});
+
+bot.action("admins_remove", async (ctx) => {
+  await ctx.answerCbQuery();
+  if (!isSuperAdmin(ctx.from.id)) return;
+  ctx.session.admin = { mode: "remove_admin" };
+  await ctx.reply("👑 Admin o'chirish\n\nAdmin ID raqamini kiriting.");
+});
+
+bot.action("admins_list", async (ctx) => {
+  await ctx.answerCbQuery();
+  if (!isSuperAdmin(ctx.from.id)) return;
+  await sendAdminList(ctx);
 });
 
 bot.action("channels_add", async (ctx) => {
@@ -989,6 +1190,7 @@ bot.catch((err) => {
 
 (async () => {
   await ensureDataFiles();
+  await loadDynamicAdmins();
   await bot.launch();
   console.log("Feya Bot started");
 })();

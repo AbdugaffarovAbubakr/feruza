@@ -9,7 +9,8 @@ const FILES = {
   users: { name: 'users.json', defaultData: { users: [] } },
   channels: { name: 'channels.json', defaultData: { channels: [] } },
   tests: { name: 'tests.json', defaultData: { tests: [] } },
-  results: { name: 'results.json', defaultData: { results: [] } }
+  results: { name: 'results.json', defaultData: { results: [] } },
+  admins: { name: 'admins.json', defaultData: { admins: [] } }
 };
 
 const writeLocks = new Map();
