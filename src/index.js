@@ -4,16 +4,18 @@ require("dotenv").config();
 const { Telegraf, Markup, session } = require("telegraf");
 const { ensureDataFiles, readJson, writeJson } = require("./storage");
 
-const http = require('http');
+const http = require("http");
 
 const PORT = process.env.PORT || 9001;
 
-http.createServer((req, res) => {
-  res.writeHead(200, { 'Content-Type': 'text/plain' });
-  res.end('Bot is running');
-}).listen(PORT, () => {
-  console.log(`HTTP server running on port ${PORT}`);
-});
+http
+  .createServer((req, res) => {
+    res.writeHead(200, { "Content-Type": "text/plain" });
+    res.end("Bot is running");
+  })
+  .listen(PORT, () => {
+    console.log(`HTTP server running on port ${PORT}`);
+  });
 
 const BOT_TOKEN = process.env.BOT_TOKEN;
 const SUPER_ADMIN_IDS = (process.env.SUPER_ADMIN_IDS || "")
@@ -255,13 +257,11 @@ async function showJoinPrompt(ctx) {
     return showMainMenu(ctx);
   }
   const text = [
-    "🔔 Majburiy kanallar",
-    "",
-    "Botdan foydalanish uchun quyidagi kanallarga a'zo bo'ling:",
+    "Akademik viktorinada ishtirok etish uchun quyidagi kanallarga obuna bo'ling",
     "",
     formatChannelsList(channels),
     "",
-    '✅ A\'zo bo\'lgach, "✅ Tekshirish" tugmasini bosing.',
+    "✅ A'zo bo'lgach, \"✅ Tekshirish\" tugmasini bosing.",
   ].join("\n");
   return ctx.reply(text, buildChannelsKeyboard(channels));
 }
@@ -304,6 +304,10 @@ function optionLabel(index) {
 
 function formatTestStatus(status) {
   return status === "open" ? "✅ Ochiq" : "❌ Yopiq";
+}
+
+function formatChannelStatus(status) {
+  return status === "active" ? "✅ Faol" : "⛔ O'chirilgan";
 }
 
 function parseAdminId(text) {
@@ -426,7 +430,9 @@ async function sendResultsSummary(ctx) {
     })
     .sort((a, b) => String(b.lastDate).localeCompare(String(a.lastDate)));
 
-  await ctx.reply(`📊 Natijalar (testlar bo'yicha)\n\nJami testlar: ${groups.length}`);
+  await ctx.reply(
+    `📊 Natijalar (testlar bo'yicha)\n\nJami testlar: ${groups.length}`,
+  );
 
   for (const group of groups) {
     const results = [...group.list].sort((a, b) => {
@@ -509,6 +515,44 @@ async function sendUsersList(ctx) {
   }
 }
 
+async function sendChannelsList(ctx) {
+  const channelsData = await getChannelsData();
+  const channels = Array.isArray(channelsData.channels)
+    ? channelsData.channels
+    : [];
+
+  if (!channels.length) {
+    return ctx.reply("ℹ️ Hali kanallar qo'shilmagan.");
+  }
+
+  const activeCount = channels.filter((c) => c.status === "active").length;
+  const inactiveCount = channels.length - activeCount;
+
+  const lines = [];
+  lines.push("📡 Kanallar ro'yxati");
+  lines.push(`Jami: ${channels.length}`);
+  lines.push(`Faol: ${activeCount}`);
+  lines.push(`O'chirilgan: ${inactiveCount}`);
+  lines.push("");
+
+  channels.forEach((c, i) => {
+    const username = c.username ? c.username : "—";
+    const name = c.name || "—";
+    const status = formatChannelStatus(c.status);
+    lines.push(
+      [
+        `${i + 1}. ${name}`,
+        `   👤 Username: ${username}`,
+        `   🆔 ID: ${c.id}`,
+        `   🔔 Holat: ${status}`,
+      ].join("\n"),
+    );
+    lines.push("");
+  });
+
+  await sendLongText(ctx, lines.join("\n"));
+}
+
 async function sendAdminList(ctx) {
   const usersData = await getUsersData();
   const userMap = new Map(usersData.users.map((u) => [u.id, u]));
@@ -534,9 +578,7 @@ async function sendAdminList(ctx) {
   lines.push("👑 Adminlar");
   lines.push(`Jami: ${totalAdmins}`);
   lines.push(`Super adminlar: ${superIds.length}`);
-  lines.push(
-    `Oddiy adminlar: ${staticIds.length + dynamicIds.length}`,
-  );
+  lines.push(`Oddiy adminlar: ${staticIds.length + dynamicIds.length}`);
   lines.push("");
 
   if (superIds.length) {
@@ -585,7 +627,7 @@ async function sendTestList(ctx) {
       `Savollar: ${test.questions.length}`,
     ].join("\n");
 
-    const keyboard = Markup.inlineKeyboard([
+    const rows = [
       [
         Markup.button.callback(
           test.status === "open" ? "🔒 Yopish" : "🔓 Ochish",
@@ -596,7 +638,15 @@ async function sendTestList(ctx) {
         Markup.button.callback("✏️ Tahrirlash", `test_edit:${test.id}`),
         Markup.button.callback("🗑️ O'chirish", `test_delete:${test.id}`),
       ],
-    ]);
+    ];
+
+    if (isSuperAdmin(ctx.from.id)) {
+      rows.push([
+        Markup.button.callback("✅ Javoblar", `test_answers:${test.id}`),
+      ]);
+    }
+
+    const keyboard = Markup.inlineKeyboard(rows);
 
     await ctx.reply(text, keyboard);
   }
@@ -634,9 +684,7 @@ async function handleAdminMessage(ctx) {
     }
 
     ctx.session.admin = null;
-    await ctx.reply(
-      `✅ Xabar yuborildi.\nYetkazildi: ${ok}\nXatolar: ${fail}`,
-    );
+    await ctx.reply(`✅ Xabar yuborildi.\nYetkazildi: ${ok}\nXatolar: ${fail}`);
     await showAdminMenu(ctx);
     return true;
   }
@@ -792,7 +840,9 @@ async function handleAdminMessage(ctx) {
       return true;
     }
     if (ADMIN_IDS.includes(id)) {
-      await ctx.reply("⚠️ Bu admin .env orqali belgilangan, olib tashlab bo'lmaydi.");
+      await ctx.reply(
+        "⚠️ Bu admin .env orqali belgilangan, olib tashlab bo'lmaydi.",
+      );
       return true;
     }
     if (!dynamicAdmins.has(id)) {
@@ -1000,7 +1050,7 @@ bot.hears("📊 Urinishlarim", async (ctx) => {
 
 bot.hears("ℹ️ Bot haqida", async (ctx) => {
   return ctx.reply(
-    "ℹ️ Bot haqida\n\nFeya Bot foydalanuvchilar uchun test yechish botidir. Maqsad — bilimlarni mustahkamlash va intellektual raqobatni rivojlantirish.\n\n👨‍💻 Muallif: @AbdugaffarovAbubakr",
+    "💡 Ushbu bot STEAM yo‘nalishlari bo‘yicha bilimlarni mustahkamlash, intellektual raqobatni rivojlantirish va ishtirokchilarni doimiy o‘rganishga rag‘batlantirish uchun xizmat qiladi.\n\n🚀 Bilimingizni sinab ko‘ring, reytingda yuqoriga ko‘tariling va sovrinli g‘oliblardan biriga aylaning!",
   );
 });
 
@@ -1051,6 +1101,7 @@ bot.hears("👑 Adminlar", async (ctx) => {
 
 bot.hears("📡 Kanallar", async (ctx) => {
   if (!isAdmin(ctx.from.id)) return;
+  await sendChannelsList(ctx);
   await ctx.reply(
     "📡 Kanallar\n\nKerakli amalni tanlang:",
     Markup.inlineKeyboard([
@@ -1130,7 +1181,9 @@ bot.action(/^test_toggle:(\d+)$/, async (ctx) => {
   }
   test.status = test.status === "open" ? "closed" : "open";
   await saveTestsData(testsData);
-  await ctx.reply(`✅ Test holati yangilandi: ${formatTestStatus(test.status)}`);
+  await ctx.reply(
+    `✅ Test holati yangilandi: ${formatTestStatus(test.status)}`,
+  );
 });
 
 bot.action(/^test_edit:(\d+)$/, async (ctx) => {
@@ -1139,6 +1192,39 @@ bot.action(/^test_edit:(\d+)$/, async (ctx) => {
   const testId = Number(ctx.match[1]);
   ctx.session.admin = { mode: "edit_test_title", testId };
   await ctx.reply("✏️ Test tahriri\n\nYangi test nomini kiriting.");
+});
+
+bot.action(/^test_answers:(\d+)$/, async (ctx) => {
+  await ctx.answerCbQuery();
+  if (!isSuperAdmin(ctx.from.id)) return;
+  const testId = Number(ctx.match[1]);
+  const testsData = await getTestsData();
+  const test = testsData.tests.find((t) => t.id === testId);
+  if (!test) {
+    return ctx.reply("⚠️ Test topilmadi.");
+  }
+
+  const lines = [];
+  lines.push(`✅ Javoblar: ${test.title} #${test.id}`);
+  lines.push(`Savollar: ${test.questions.length}`);
+  lines.push("");
+
+  test.questions.forEach((q, i) => {
+    const correctIndex = Number(q.correct_answer);
+    const label = Number.isInteger(correctIndex)
+      ? optionLabel(correctIndex)
+      : "?";
+    const answerText =
+      Number.isInteger(correctIndex) && q.options[correctIndex]
+        ? q.options[correctIndex]
+        : "—";
+
+    lines.push(`${i + 1}. ${q.question}`);
+    lines.push(`   ✅ ${label}. ${answerText}`);
+    lines.push("");
+  });
+
+  await sendLongText(ctx, lines.join("\n"));
 });
 
 bot.action(/^test_delete:(\d+)$/, async (ctx) => {
